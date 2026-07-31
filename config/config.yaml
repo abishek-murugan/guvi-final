@@ -1,0 +1,81 @@
+# ---------------------------------------------------------------------------
+# Browsing Analyzer - Main Configuration
+# ---------------------------------------------------------------------------
+browser:
+  name: "chrome"
+  profile: "Default"
+
+# User-provided data files (simulated collection outputs)
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  models_dir: "data/models"
+  chrome_data_file: "chrome_data.csv"
+  ram_data_file: "ram_data.csv"
+  browser_history_output: "browsing_history.csv"
+  ram_log_output: "ram_log.csv"
+
+# Time window options (days) selectable by the user
+time_windows: [3, 4, 5]
+default_window: 4
+
+# Sessionization settings
+sessionization:
+  inactivity_threshold_minutes: 15
+  min_session_events: 2
+
+# RAM logging settings (used to describe collection methodology)
+ram_logger:
+  interval_seconds: 5
+  duration_hours: 24
+
+# Clustering settings
+clustering:
+  algorithm: "kmeans"  # kmeans | gmm | dbscan
+  n_clusters: 5
+  random_state: 42
+  features:
+    - "duration_minutes"
+    - "event_count"
+    - "unique_domains"
+    - "category_entropy"
+    - "switching_rate"
+    - "avg_ram_mb"
+    - "peak_ram_mb"
+    - "median_hour"
+    - "is_weekend"
+    - "session_span_hours"
+
+# PyTorch LSTM model settings
+model:
+  type: "lstm"
+  sequence_length: 20
+  embedding_dim: 32
+  hidden_dim: 64
+  num_layers: 2
+  dropout: 0.2
+  batch_size: 32
+  epochs: 120
+  learning_rate: 0.001
+  validation_split: 0.2
+  patience: 15
+  seed: 42
+
+# Recommendation engine thresholds
+recommendations:
+  social_media_threshold: 0.45
+  late_night_hour: 22
+  ram_spike_threshold_mb: 500
+  category_ram_threshold_mb: 300
+
+# Output / reporting
+output:
+  report_path: "reports"
+  report_filename: "browsing_report.md"
+  dashboard_port: 8501
+
+# Logging
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  console_output: true
