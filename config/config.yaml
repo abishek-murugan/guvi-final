@@ -14,6 +14,7 @@ data:
   ram_data_file: "ram_data.csv"
   browser_history_output: "browsing_history.csv"
   ram_log_output: "ram_log.csv"
+  model_output_file: "lstm_model.pt"
 
 # Time window options (days) selectable by the user
 time_windows: [3, 4, 5]
@@ -75,7 +76,6 @@ recommendations:
 output:
   report_path: "reports"
   report_filename: "browsing_report.md"
-  dashboard_port: 8501
 
 # Logging
 logging:

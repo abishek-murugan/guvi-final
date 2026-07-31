@@ -8,13 +8,10 @@ Usage (installed as ``browsing-analyzer``):
     browsing-analyzer preprocess --window 4
     browsing-analyzer train --window 4
     browsing-analyzer report --window 4
-    browsing-analyzer dashboard
 """
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -96,26 +93,6 @@ def report(window: WINDOW_OPTION = None) -> None:
     path = Path(settings.output.report_path) / settings.output.report_filename
     generate_markdown_report(result, path)
     typer.echo(f"Report written to {path}")
-
-
-@app.command()
-def dashboard() -> None:
-    """Launch the Streamlit dashboard."""
-    configure_logging()
-    settings = load_settings()
-    port = settings.output.dashboard_port
-    dashboard_script = Path(__file__).resolve().parent / "reporting" / "dashboard.py"
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(dashboard_script),
-        "--server.port",
-        str(port),
-    ]
-    typer.echo(f"Launching dashboard on http://localhost:{port}")
-    subprocess.run(cmd, check=False)
 
 
 if __name__ == "__main__":

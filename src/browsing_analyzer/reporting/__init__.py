@@ -1,6 +1,5 @@
-"""Reporting package: markdown report + Streamlit dashboard."""
+"""Reporting package: markdown report generator."""
 
-from .dashboard import run_dashboard
 from .generator import generate_markdown_report
 
-__all__ = ["generate_markdown_report", "run_dashboard"]
+__all__ = ["generate_markdown_report"]

@@ -1,22 +1,24 @@
 """RAM usage collection.
 
-In production a background thread samples system and browser memory every
-``ram_logger.interval_seconds`` (5-10s) using :mod:`psutil`:
+Two code paths live here:
 
-* ``ram_used_mb`` / ``ram_available_mb`` from ``psutil.virtual_memory()``.
-* ``browser_ram_mb`` as the sum of resident memory of all Chrome processes.
-* ``cpu_percent`` from ``psutil.cpu_percent(interval=None)``.
+1. :func:`collect_ram_log` — samples system and browser memory via
+   :mod:`psutil` every ``interval_seconds`` and appends each reading to
+   ``data/raw/ram_data.csv``.
+2. :func:`load_ram_log` — ingests that exported CSV and returns a normalized
+   DataFrame for the downstream pipeline.
 
-Each sample is appended to ``data/raw/ram_log.csv``. For this deliverable the
-RAM log was collected locally with that procedure; this loader ingests the
-exported CSV and returns a normalized DataFrame for the downstream pipeline.
+The collection step runs once on the user's machine (locally, privately);
+the pipeline itself only reads the CSV via :func:`load_ram_log`.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pandas as pd
+import psutil
 
 from ..config import Settings
 from ..utils.logging import get_logger
@@ -33,6 +35,81 @@ GB_SCHEMA_COLUMNS = {
     "available_ram_gb": "ram_available_mb",
     "chrome_ram_gb": "browser_ram_mb",
 }
+
+_BYTES_TO_MB = 1024 * 1024
+
+
+def _chrome_processes() -> list[psutil.Process]:
+    """Return running Chrome processes, or an empty list if none are found."""
+    chrome = []
+    for proc in psutil.process_iter(["name"]):
+        try:
+            if "chrome" in proc.info["name"].lower():
+                chrome.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return chrome
+
+
+def _chrome_ram_mb() -> float:
+    """Total resident memory (MB) used by all Chrome processes."""
+    total = 0.0
+    for proc in _chrome_processes():
+        try:
+            total += proc.memory_info().rss / _BYTES_TO_MB
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return total
+
+
+def collect_ram_log(
+    settings: Settings,
+    duration_hours: float | None = None,
+    interval_seconds: int | None = None,
+    output_path: Path | None = None,
+) -> pd.DataFrame:
+    """Sample system + browser RAM via psutil and export to CSV.
+
+    Samples are taken every ``interval_seconds`` for ``duration_hours`` hours.
+    Each row captures system memory (used/available), the total resident
+    memory of all Chrome processes, and overall CPU utilisation.
+
+    Args:
+        settings: Application settings (RAM logger knobs).
+        duration_hours: How long to keep sampling. Defaults to
+            ``settings.ram_logger.duration_hours``.
+        interval_seconds: Seconds between samples. Defaults to
+            ``settings.ram_logger.interval_seconds``.
+        output_path: Destination CSV path. Defaults to ``data/raw/ram_data.csv``.
+
+    Returns:
+        A DataFrame with ``timestamp``, ``ram_used_mb``, ``ram_available_mb``,
+        ``browser_ram_mb`` and ``cpu_percent`` columns.
+    """
+    interval = interval_seconds or settings.ram_logger.interval_seconds
+    duration = duration_hours or settings.ram_logger.duration_hours
+    deadline = time.time() + duration * 3600.0
+
+    rows: list[dict] = []
+    while time.time() < deadline:
+        mem = psutil.virtual_memory()
+        rows.append(
+            {
+                "timestamp": pd.Timestamp.now().isoformat(),
+                "ram_used_mb": round(mem.used / _BYTES_TO_MB, 1),
+                "ram_available_mb": round(mem.available / _BYTES_TO_MB, 1),
+                "browser_ram_mb": round(_chrome_ram_mb(), 1),
+                "cpu_percent": round(psutil.cpu_percent(interval=0.5), 1),
+            }
+        )
+        time.sleep(interval)
+
+    df = pd.DataFrame(rows)
+    out = output_path or (Path("data") / "raw" / "ram_data.csv")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out, index=False)
+    logger.info("ram_log_exported", rows=len(df), path=str(out))
+    return df
 
 
 def load_ram_log(settings: Settings, csv_path: Path | None = None) -> pd.DataFrame:
