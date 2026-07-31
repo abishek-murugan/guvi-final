@@ -34,7 +34,7 @@ def generate_markdown_report(result: PipelineResult, output_path: Path) -> Path:
     lines.append("")
     lines.append("> Generated locally. All data is domain/category level; no raw URLs.")
     lines.append("")
-    window = result.settings.default_window
+    window = result.window_days
     lines.append(f"**Analysis window:** last {window} days")
     lines.append(f"**Events analyzed:** {len(result.events)}")
     lines.append(f"**Sessions identified:** {len(result.sessions)}")
@@ -51,6 +51,9 @@ def generate_markdown_report(result: PipelineResult, output_path: Path) -> Path:
         cat_table = result.category_stats.copy()
         cat_table["share"] = cat_table["event_count"] / cat_table["event_count"].sum()
         cat_table["share"] = cat_table["share"].map(lambda x: f"{x:.1%}")
+        for col in cat_table.columns:
+            if pd.api.types.is_float_dtype(cat_table[col]):
+                cat_table[col] = cat_table[col].round(0)
         lines.append(_df_table(cat_table))
     lines.append("")
 
