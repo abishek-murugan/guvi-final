@@ -12,9 +12,9 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from ..config import load_settings
-from ..pipeline import run_pipeline
-from ..utils.logging import configure_logging, get_logger
+from browsing_analyzer.config import load_settings
+from browsing_analyzer.pipeline import run_pipeline
+from browsing_analyzer.utils.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
 

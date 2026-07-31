@@ -2,30 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from browsing_analyzer.config import Settings
 from browsing_analyzer.pipeline import run_pipeline
 
-SYNTH_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "generate_synthetic_data.py"
 
-
-def _synthetic_files(tmp_path: Path) -> tuple[Path, Path]:
-    """Generate a small synthetic dataset for pipeline testing."""
-    import subprocess
-    import sys
-
-    out = tmp_path / "raw"
-    subprocess.run(
-        [sys.executable, str(SYNTH_SCRIPT), "--days", "3", "--seed", "1", "--out", str(out)],
-        check=True,
-        capture_output=True,
-    )
-    return out / "chrome_data.csv", out / "ram_data.csv"
-
-
-def test_full_pipeline_end_to_end(tmp_path: Path):
-    history_path, ram_path = _synthetic_files(tmp_path)
+def test_full_pipeline_end_to_end(synthetic_data_files):
+    history_path, ram_path = synthetic_data_files
     settings = Settings()
     result = run_pipeline(
         settings=settings,
@@ -46,7 +28,7 @@ def test_full_pipeline_end_to_end(tmp_path: Path):
     assert "url" not in result.events.columns
 
 
-def test_pipeline_rejects_invalid_window(tmp_path: Path):
+def test_pipeline_rejects_invalid_window(tmp_path):
     settings = Settings()
     try:
         run_pipeline(settings=settings, window_days=99)
