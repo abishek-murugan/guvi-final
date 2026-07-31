@@ -29,7 +29,7 @@ class Recommendation:
     metric: str
 
     def to_dict(self) -> dict[str, str]:
-        """Serialize for reporting/dashboard."""
+        """Serialize for reporting."""
         return {
             "title": self.title,
             "rationale": self.rationale,

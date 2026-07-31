@@ -2,8 +2,8 @@
 
 Glues together: collection -> cleaning -> categorization -> sessionization ->
 RAM correlation -> clustering -> patterns -> LSTM training -> recommendations.
-The pipeline is exposed as a single ``PipelineResult`` for the CLI, report
-generator, and dashboard.
+The pipeline is exposed as a single ``PipelineResult`` for the CLI and report
+generator.
 """
 
 from __future__ import annotations
@@ -122,6 +122,9 @@ def run_pipeline(
     predictor = None
     if train_model_flag and not events.empty:
         predictor, dl_result = run_lstm(settings, events)
+        if predictor is not None:
+            model_path = Path(settings.data.models_dir) / settings.data.model_output_file
+            predictor.save(model_path)
 
     # 9. Recommendations
     dl_signals = {}
