@@ -1,0 +1,149 @@
+# ---------------------------------------------------------------------------
+# Domain -> Category Mapping
+#
+# The categorizer uses this curated table to map a website's domain to a
+# human-readable behavioral category. Domains not present here fall back to
+# either the suffix/prefix heuristic or the "other" bucket.
+#
+# Categories used across the pipeline:
+#   social, media, learning, shopping, productivity, news, entertainment,
+#   finance, travel, health, search, other
+# ---------------------------------------------------------------------------
+
+social:
+  - facebook.com
+  - www.facebook.com
+  - instagram.com
+  - twitter.com
+  - x.com
+  - linkedin.com
+  - reddit.com
+  - discord.com
+  - tiktok.com
+  - snapchat.com
+  - whatsapp.com
+  - telegram.org
+  - pinterest.com
+
+media:
+  - youtube.com
+  - netflix.com
+  - primevideo.com
+  - hotstar.com
+  - spotify.com
+  - twitch.tv
+  - vimeo.com
+  - dailymotion.com
+  - disneyplus.com
+
+learning:
+  - wikipedia.org
+  - stackoverflow.com
+  - github.com
+  - coursera.org
+  - udemy.com
+  - khanacademy.org
+  - edx.org
+  - geeksforgeeks.org
+  - w3schools.com
+  - freecodecamp.org
+  - medium.com
+  - docs.python.org
+  - developer.mozilla.org
+  - towardsdatascience.com
+  - guvi.in
+
+shopping:
+  - amazon.com
+  - amazon.in
+  - flipkart.com
+  - myntra.com
+  - ebay.com
+  - aliexpress.com
+  - ajio.com
+  - snapdeal.com
+  - meesho.com
+
+productivity:
+  - mail.google.com
+  - gmail.com
+  - outlook.com
+  - calendar.google.com
+  - drive.google.com
+  - docs.google.com
+  - sheets.google.com
+  - notion.so
+  - trello.com
+  - slack.com
+  - teams.microsoft.com
+  - zoom.us
+  - asana.com
+
+news:
+  - news.google.com
+  - cnn.com
+  - bbc.com
+  - thehindu.com
+  - indiatimes.com
+  - toi.com
+  - hindustantimes.com
+  - nytimes.com
+  - reuters.com
+  - theguardian.com
+  - ndtv.com
+
+entertainment:
+  - imdb.com
+  - rottentomatoes.com
+  - 9gag.com
+  - quora.com
+  - buzzfeed.com
+  - cracked.com
+  - espn.com
+  - hulu.com
+
+finance:
+  - paypal.com
+  - stripe.com
+  - zerodha.com
+  - groww.in
+  - moneycontrol.com
+  - investing.com
+  - bankofamerica.com
+  - icicibank.com
+  - sbi.co.in
+  - hdfcbank.com
+  - coinbase.com
+  - binance.com
+
+travel:
+  - makemytrip.com
+  - goibibo.com
+  - yatra.com
+  - booking.com
+  - expedia.com
+  - airbnb.com
+  - irctc.co.in
+  - trivago.com
+  - oyo.com
+  - cleartrip.com
+
+health:
+  - webmd.com
+  - mayoclinic.org
+  - healthline.com
+  - practo.com
+  - 1mg.com
+  - nhs.uk
+  - who.int
+  - everydayhealth.com
+
+search:
+  - google.com
+  - google.co.in
+  - bing.com
+  - duckduckgo.com
+  - yahoo.com
+  - brave.com
+
+other: []
