@@ -7,7 +7,6 @@ and outputs a probability distribution over the next category.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import torch
@@ -117,12 +116,58 @@ class NextCategoryPredictor:
         probs = torch.softmax(logits, dim=-1).squeeze(0)
         return {self.idx_to_cat[i]: float(probs[i].item()) for i in range(1, self.vocab_size)}
 
-    def save_metadata(self, path: Path) -> None:
-        """Persist category vocab so inference can reload the model."""
-        path.write_text(json.dumps({"categories": self.categories}, indent=2), encoding="utf-8")
+    def save(self, path: Path) -> None:
+        """Persist the trained model, vocab, and full model configuration.
+
+        Args:
+            path: Destination ``.pt`` file.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(
+            {
+                "model_state_dict": self.model.state_dict(),
+                "categories": self.categories,
+                "config": {
+                    "sequence_length": self.settings.model.sequence_length,
+                    "embedding_dim": self.settings.model.embedding_dim,
+                    "hidden_dim": self.settings.model.hidden_dim,
+                    "num_layers": self.settings.model.num_layers,
+                    "dropout": self.settings.model.dropout,
+                    "batch_size": self.settings.model.batch_size,
+                    "learning_rate": self.settings.model.learning_rate,
+                    "seed": self.settings.model.seed,
+                },
+            },
+            path,
+        )
+        logger.info("model_saved", path=str(path))
 
     @classmethod
-    def from_metadata(cls, settings: Settings, metadata_path: Path) -> NextCategoryPredictor:
-        """Reconstruct a predictor from saved metadata."""
-        data = json.loads(metadata_path.read_text(encoding="utf-8"))
-        return cls(settings, data["categories"])
+    def load(cls, path: Path, settings: Settings | None = None) -> NextCategoryPredictor:
+        """Reconstruct a predictor from a saved checkpoint.
+
+        The model architecture is rebuilt from the checkpoint's full config,
+        so no external settings are required for a faithful reload.
+
+        Args:
+            path: Path to a checkpoint written by :meth:`save`.
+            settings: Optional settings; when omitted, ``Settings()`` defaults
+                are used (the checkpoint config takes precedence).
+
+        Returns:
+            A :class:`NextCategoryPredictor` with the saved weights loaded.
+        """
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+        settings = settings or Settings()
+        settings.model.sequence_length = checkpoint["config"]["sequence_length"]
+        settings.model.embedding_dim = checkpoint["config"]["embedding_dim"]
+        settings.model.hidden_dim = checkpoint["config"]["hidden_dim"]
+        settings.model.num_layers = checkpoint["config"]["num_layers"]
+        settings.model.dropout = checkpoint["config"]["dropout"]
+
+        predictor = cls(settings, checkpoint["categories"])
+        predictor.model.load_state_dict(checkpoint["model_state_dict"])
+        predictor.model.eval()
+        logger.info("model_loaded", path=str(path))
+        return predictor

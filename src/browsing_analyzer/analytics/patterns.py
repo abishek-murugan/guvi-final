@@ -34,7 +34,7 @@ def _day_activity(events: pd.DataFrame) -> pd.DataFrame:
 
 
 def discover_time_patterns(events: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Compute temporal pattern tables used in reports and the dashboard.
+    """Compute temporal pattern tables used in reports.
 
     Args:
         events: Cleaned, categorized browsing events with ``hour``, ``date``,

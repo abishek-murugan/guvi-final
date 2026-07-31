@@ -33,6 +33,7 @@ class DataConfig(BaseModel):
     ram_data_file: str = "ram_data.csv"
     browser_history_output: str = "browsing_history.csv"
     ram_log_output: str = "ram_log.csv"
+    model_output_file: str = "lstm_model.pt"
 
 
 class SessionizationConfig(BaseModel):
@@ -86,11 +87,10 @@ class RecommendationsConfig(BaseModel):
 
 
 class OutputConfig(BaseModel):
-    """Report and dashboard output settings."""
+    """Report output settings."""
 
     report_path: str = "reports"
     report_filename: str = "browsing_report.md"
-    dashboard_port: int = 8501
 
 
 class LoggingConfig(BaseModel):
