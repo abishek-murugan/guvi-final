@@ -104,8 +104,16 @@ def dashboard() -> None:
     configure_logging()
     settings = load_settings()
     port = settings.output.dashboard_port
-    module = "browsing_analyzer.reporting.dashboard"
-    cmd = [sys.executable, "-m", "streamlit", "run", "-m", module, "--server.port", str(port)]
+    dashboard_script = Path(__file__).resolve().parent / "reporting" / "dashboard.py"
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(dashboard_script),
+        "--server.port",
+        str(port),
+    ]
     typer.echo(f"Launching dashboard on http://localhost:{port}")
     subprocess.run(cmd, check=False)
 

@@ -1,9 +1,10 @@
 """Streamlit dashboard.
 
-Run with: ``streamlit run -m browsing_analyzer.reporting.dashboard`` or via the
-CLI ``browsing-analyzer dashboard``. The dashboard re-runs the pipeline for a
-selectable window (3/4/5 days) and renders interactive charts for patterns,
-clusters, RAM correlation, LSTM output, and recommendations.
+Run with: ``uv run browsing-analyzer dashboard`` (recommended) or directly with
+``streamlit run src/browsing_analyzer/reporting/dashboard.py``. The dashboard
+re-runs the pipeline for a selectable window (3/4/5 days) and renders
+interactive charts for patterns, clusters, RAM correlation, LSTM output, and
+recommendations.
 """
 
 from __future__ import annotations
