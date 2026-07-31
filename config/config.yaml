@@ -23,6 +23,9 @@ default_window: 4
 sessionization:
   inactivity_threshold_minutes: 15
   min_session_events: 2
+  # Hard cap on session span (hours). Guarantees sessions stay usable even
+  # when data is sampled continuously (no inactivity gaps to break on).
+  max_session_hours: 4
 
 # RAM logging settings (used to describe collection methodology)
 ram_logger:

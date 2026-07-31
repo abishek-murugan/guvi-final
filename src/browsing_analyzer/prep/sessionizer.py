@@ -27,6 +27,7 @@ class Sessionizer:
     def __init__(self, settings: Settings) -> None:
         self.threshold_min = settings.sessionization.inactivity_threshold_minutes
         self.min_events = settings.sessionization.min_session_events
+        self.max_session_hours = settings.sessionization.max_session_hours
 
     def _compute_session_features(self, sessions: pd.DataFrame) -> pd.DataFrame:
         """Aggregate per-session statistics into a feature table."""
@@ -50,20 +51,17 @@ class Sessionizer:
         features["session_span_hours"] = features["duration_minutes"] / 60.0
         features["median_hour"] = session_groups["hour"].median()
         features["is_weekend"] = (
-            session_groups["day_name"]
-            .apply(lambda s: s.iloc[0] in {"Saturday", "Sunday"})
-            .astype(int)
+            session_groups["day_name"].first().isin({"Saturday", "Sunday"}).astype(int)
         )
 
-        # Category entropy (how "scattered" the browsing was within the session).
-        def _entropy(cats: pd.Series) -> float:
-            probs = cats.value_counts(normalize=True).values
-            return float(-(probs * np.log(probs + 1e-12)).sum())
+        # Category counts (vectorized crosstab) drive both entropy and ratios.
+        counts = pd.crosstab(sessions["session_id"], sessions["category"])
 
-        features["category_entropy"] = session_groups["category"].apply(_entropy)
+        # Category entropy (how "scattered" the browsing was within the session).
+        probs = counts.div(counts.sum(axis=1), axis=0)
+        features["category_entropy"] = -(probs * np.log(probs + 1e-12)).sum(axis=1)
 
         # Category ratios relative to event count.
-        counts = session_groups["category"].value_counts().unstack(fill_value=0)
         n_events = features["event_count"]
         for cat in sorted(set(sessions["category"]) | {"other"}):
             col = f"{cat}_ratio"
@@ -92,6 +90,17 @@ class Sessionizer:
         events = df.sort_values("timestamp").reset_index(drop=True).copy()
         gaps = events["timestamp"].diff().dt.total_seconds() / 60.0
         new_session = gaps > self.threshold_min
+
+        # Duration cap: even when no inactivity gap occurs (e.g. data sampled
+        # continuously at 1Hz), force a break whenever a session would span more
+        # than ``max_session_hours`` so sessions stay meaningful downstream.
+        if self.max_session_hours > 0:
+            session_start = events["timestamp"].where(new_session | (events.index == 0)).ffill()
+            elapsed_hours = (events["timestamp"] - session_start).dt.total_seconds() / 3600.0
+            bucket = elapsed_hours // self.max_session_hours
+            duration_break = (bucket != bucket.shift(1)).fillna(False)
+            new_session = new_session | duration_break
+
         events["session_id"] = new_session.cumsum().astype(int)
 
         sessions = self._compute_session_features(events)
