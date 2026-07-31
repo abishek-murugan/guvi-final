@@ -25,9 +25,22 @@ logger = get_logger(__name__)
 
 REQUIRED_COLUMNS = ["timestamp", "ram_used_mb", "ram_available_mb", "browser_ram_mb"]
 
+# Alternative schema: RAM figures exported in gigabytes instead of megabytes.
+# `used_ram_gb` -> `ram_used_mb`, `available_ram_gb` -> `ram_available_mb`,
+# `chrome_ram_gb` -> `browser_ram_mb`. Values are converted to MB (x1024).
+GB_SCHEMA_COLUMNS = {
+    "used_ram_gb": "ram_used_mb",
+    "available_ram_gb": "ram_available_mb",
+    "chrome_ram_gb": "browser_ram_mb",
+}
+
 
 def load_ram_log(settings: Settings, csv_path: Path | None = None) -> pd.DataFrame:
     """Load and validate the RAM log CSV.
+
+    Accepts either the native MB schema (``ram_used_mb``, ``ram_available_mb``,
+    ``browser_ram_mb``) or an exported GB schema (``used_ram_gb``,
+    ``available_ram_gb``, ``chrome_ram_gb``) which is normalized to MB.
 
     Args:
         settings: Application settings (used to locate the default file).
@@ -45,13 +58,24 @@ def load_ram_log(settings: Settings, csv_path: Path | None = None) -> pd.DataFra
         raise FileNotFoundError(f"RAM log file not found: {path}")
 
     df = pd.read_csv(path)
+    is_gb_schema = all(c in df.columns for c in GB_SCHEMA_COLUMNS)
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
-    if missing:
+    if missing and not is_gb_schema:
         raise ValueError(f"Missing required columns in {path}: {missing}")
+
+    if is_gb_schema:
+        df = df.rename(columns=GB_SCHEMA_COLUMNS)
+        for col in REQUIRED_COLUMNS[1:]:
+            df[col] = pd.to_numeric(df[col], errors="coerce") * 1024.0
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp"])
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    logger.info("ram_log_loaded", rows=len(df), source=str(path))
+    logger.info(
+        "ram_log_loaded",
+        rows=len(df),
+        source=str(path),
+        schema="gb" if is_gb_schema else "mb",
+    )
     return df
