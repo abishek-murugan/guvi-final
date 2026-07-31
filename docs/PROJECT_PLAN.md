@@ -49,7 +49,7 @@ RAM log CSV (ram_data.csv) ───────────┤
 1. **Foundation** — uv project, pydantic config, structlog, collectors,
    domain→category table, CLI scaffold.
 2. **Preprocessing** — URL cleaning/domain extraction, categorization,
-   sessionization with feature engineering, synthetic data generator.
+   sessionization with feature engineering.
 3. **Analytics** — RAM↔browsing correlation (nearest-timestamp merge),
    KMeans/GMM clustering with silhouette + auto labels, temporal patterns.
 4. **Deep learning** — PyTorch LSTM (Embedding → LSTM → Linear → Softmax),

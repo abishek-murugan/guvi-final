@@ -17,7 +17,7 @@ a Markdown report, and a Streamlit dashboard.
 - Format check: `uv run ruff format --check src`
 - Type check: `uv run mypy src`
 - Full pipeline: `uv run browsing-analyzer pipeline --window 4`
-- Generate demo data: `uv run python scripts/generate_synthetic_data.py`
+- Runner script: `uv run python scripts/run_pipeline.py --window 4`
 
 ## Code Layout
 
@@ -29,8 +29,9 @@ a Markdown report, and a Streamlit dashboard.
   `PipelineResult`.
 - `src/browsing_analyzer/{collect,prep,analytics,models,recommendations,reporting,utils}/`
   — modular responsibilities matching the plan.
-- `src/tests/` — pytest suite (unit + integration).
-- `scripts/` — standalone runners + synthetic data generator.
+- `src/tests/` — pytest suite (unit + integration); synthetic fixtures live in
+  `src/tests/conftest.py`.
+- `scripts/` — standalone runners.
 - `config/` — configuration YAML files (never treat as code).
 
 ## Conventions

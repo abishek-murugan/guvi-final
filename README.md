@@ -60,7 +60,6 @@ Chrome history CSV ─┐                       ┌─ RAM log CSV
 ├── logs/                       # Structured log output
 ├── reports/                    # Generated markdown reports
 ├── scripts/
-│   ├── generate_synthetic_data.py  # Synthetic demo data (no real browsing needed)
 │   └── run_pipeline.py             # One-shot pipeline runner
 ├── src/
 │   └── browsing_analyzer/
@@ -85,24 +84,25 @@ Requirements: **Python 3.11+**, **uv** (https://astral.sh/uv), Linux (Chrome his
 # 1. Install dependencies
 uv sync
 
-# 2. (Optional) Generate synthetic demo data — 5 days of realistic history + RAM
-uv run python scripts/generate_synthetic_data.py --days 5 --seed 42
-
-# 3. OR place your collected data in place
+# 2. Place your collected data in place
 #    data/raw/chrome_data.csv
 #    data/raw/ram_data.csv
 ```
 
 ### Data format
 
-`data/raw/chrome_data.csv`:
+`data/raw/chrome_data.csv` (minimum `timestamp`, `url` columns):
 
 | timestamp               | url                                | title     |
 |-------------------------|------------------------------------|-----------|
 | 2026-07-28T10:00:00     | https://www.facebook.com/feed?ref=1 | My feed   |
 | 2026-07-28T10:05:00     | https://www.youtube.com/watch?v=abc  | A video   |
 
-`data/raw/ram_data.csv`:
+`data/raw/ram_data.csv` — either a GB schema (converted to MB automatically) or an MB schema:
+
+| timestamp           | total_ram_gb | used_ram_gb | available_ram_gb | chrome_ram_gb | cpu_percent |
+|---------------------|--------------|-------------|------------------|---------------|-------------|
+| 2026-07-28T10:00:00 | 16.0         | 9.24        | 6.76             | 1.46          | 30.0        |
 
 | timestamp           | ram_used_mb | ram_available_mb | browser_ram_mb | cpu_percent |
 |---------------------|-------------|------------------|----------------|-------------|

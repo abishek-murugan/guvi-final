@@ -43,6 +43,7 @@ class PipelineResult:
     recommendations: list[Recommendation]
     settings: Settings = field(default_factory=load_settings)
     predictor: NextCategoryPredictor | None = None
+    window_days: int = 4
 
 
 def run_pipeline(
@@ -164,6 +165,7 @@ def run_pipeline(
         recommendations=recommendations,
         settings=settings,
         predictor=predictor,
+        window_days=window,
     )
 
 

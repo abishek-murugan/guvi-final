@@ -40,6 +40,7 @@ class SessionizationConfig(BaseModel):
 
     inactivity_threshold_minutes: int = 15
     min_session_events: int = 2
+    max_session_hours: int = 4
 
 
 class RamLoggerConfig(BaseModel):
