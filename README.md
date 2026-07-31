@@ -121,7 +121,7 @@ uv run browsing-analyzer report --window 4
 
 # Streamlit dashboard
 uv run browsing-analyzer dashboard
-# or: uv run streamlit run -m browsing_analyzer.reporting.dashboard
+# or: uv run streamlit run src/browsing_analyzer/reporting/dashboard.py
 
 # Script-based runner (same as `pipeline`)
 uv run python scripts/run_pipeline.py --window 4
