@@ -124,10 +124,7 @@ uv run browsing-analyzer train --window 4
 uv run browsing-analyzer report --window 4
 ```
 
-## Collecting data (optional)
-
-Data collection runs once on your machine, privately, and is not part of the
-pipeline (the pipeline reads the exported CSVs):
+## Collecting data
 
 ```bash
 # Extract browsing history from Chrome's SQLite DB -> data/raw/chrome_data.csv
