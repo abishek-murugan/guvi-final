@@ -25,7 +25,6 @@ htmlcov/
 
 # Raw & processed data (privacy: never commit user browsing data)
 data/raw/*
-data/processed/*
 data/models/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
@@ -37,7 +36,6 @@ logs/*
 !logs/.gitkeep
 
 # Reports
-reports/*
 !reports/.gitkeep
 
 # Jupyter / IDE
