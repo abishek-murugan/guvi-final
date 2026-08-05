@@ -26,6 +26,7 @@ htmlcov/
 # Raw & processed data (privacy: never commit user browsing data)
 data/raw/*
 data/models/*
+data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/models/.gitkeep
