@@ -48,3 +48,6 @@ logs/*
 # Secrets / env
 .env
 .env.*
+
+# Generated domain-mapping cache (source of truth: notebooks/guvi-final.ipynb)
+config/domain_category_map.yaml

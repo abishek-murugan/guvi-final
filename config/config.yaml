@@ -1,84 +1,82 @@
-# ---------------------------------------------------------------------------
 # Browsing Analyzer - Main Configuration
-# ---------------------------------------------------------------------------
-browser:
-  name: "chrome"
-  profile: "Default"
+# Values mirror the notebook pipeline in notebooks/guvi-final.ipynb.
 
-# User-provided data files (simulated collection outputs)
+# The notebook is the single source of truth for the domain -> category
+# mapping; it is parsed at runtime and cached here.
+notebook_path: notebooks/guvi-final.ipynb
+domain_categories_yaml: config/domain_category_map.yaml
+
 data:
-  raw_dir: "data/raw"
-  processed_dir: "data/processed"
-  models_dir: "data/models"
-  chrome_data_file: "chrome_data.csv"
-  ram_data_file: "ram_data.csv"
-  browser_history_output: "browsing_history.csv"
-  ram_log_output: "ram_log.csv"
-  model_output_file: "lstm_model.pt"
+  raw_dir: data/raw
+  processed_dir: data/processed
+  models_dir: data/models
+  browser_history_file: browsing_history_last5days.csv
+  ram_log_file: ram_log_last5days.csv
+  browser_history_output: browsing_history_last5days.csv
+  ram_log_output: ram_log_last5days.csv
+  processed_history_file: final_browsing_history.csv
+  processed_ram_log_file: final_ram_log.csv
+  domain_category_map_file: domain_category_map.csv
+  merged_data_file: merged_data.csv
+  session_summary_file: session_summary.csv
+  session_features_file: session_features.csv
+  category_ram_stats_file: category_ram_stats.csv
+  cluster_viz_file: cluster_viz.csv
+  lstm_confusion_file: lstm_confusion.csv
+  sequences_file: lstm_sequences.npz
+  metrics_file: pipeline_metrics.json
+  recommendations_file: recommendations.json
+  model_output_file: lstm_model.pt
+  model_metadata_file: lstm_metadata.json
+  lstm_result_file: lstm_result.pkl
+  cluster_model_file: cluster_model.pkl
 
-# Time window options (days) selectable by the user
-time_windows: [3, 4, 5]
-default_window: 4
-
-# Sessionization settings
 sessionization:
   inactivity_threshold_minutes: 15
-  min_session_events: 2
-  # Hard cap on session span (hours). Guarantees sessions stay usable even
-  # when data is sampled continuously (no inactivity gaps to break on).
-  max_session_hours: 4
 
-# RAM logging settings (used to describe collection methodology)
-ram_logger:
-  interval_seconds: 5
-  duration_hours: 24
-
-# Clustering settings
 clustering:
-  algorithm: "kmeans"  # kmeans | gmm | dbscan
-  n_clusters: 5
+  n_clusters: 2
   random_state: 42
   features:
-    - "duration_minutes"
-    - "event_count"
-    - "unique_domains"
-    - "category_entropy"
-    - "switching_rate"
-    - "avg_ram_mb"
-    - "peak_ram_mb"
-    - "median_hour"
-    - "is_weekend"
-    - "session_span_hours"
+    - session_duration_minutes
+    - page_count
+    - unique_domains
+    - unique_categories
+    - domain_switches
+    - category_switches
+    - avg_time_per_page_seconds
+    - mean_used_mb
+    - peak_used_mb
+    - mean_usage_percent
+    - peak_usage_percent
+    - session_start_hour
+    - session_start_dayofweek
 
-# PyTorch LSTM model settings
 model:
-  type: "lstm"
-  sequence_length: 20
-  embedding_dim: 32
-  hidden_dim: 64
+  type: lstm
+  sequence_length: 5
+  embedding_dim: 128
+  hidden_dim: 256
   num_layers: 2
-  dropout: 0.2
-  batch_size: 32
-  epochs: 120
+  dropout: 0.5
+  batch_size: 64
+  epochs: 10
   learning_rate: 0.001
-  validation_split: 0.2
-  patience: 15
-  seed: 42
+  test_size: 0.2
+  random_state: 42
 
-# Recommendation engine thresholds
 recommendations:
-  social_media_threshold: 0.45
   late_night_hour: 22
+  social_media_threshold: 0.45
   ram_spike_threshold_mb: 500
   category_ram_threshold_mb: 300
+  high_switch_threshold: 6
 
-# Output / reporting
 output:
-  report_path: "reports"
-  report_filename: "browsing_report.md"
+  images_dir: reports/images
+  report_path: reports
+  report_filename: Final_Project_Report.md
 
-# Logging
 logging:
-  level: "INFO"
-  log_dir: "logs"
-  console_output: true
+  level: INFO
+  log_dir: logs

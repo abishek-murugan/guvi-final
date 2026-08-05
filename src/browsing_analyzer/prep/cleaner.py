@@ -1,114 +1,60 @@
-"""URL cleaning and domain extraction.
+"""URL cleaning and feature extraction.
 
-Privacy-first: every URL is reduced to its registrable domain. Query strings,
-path fragments, and credentials are stripped so that only the domain and
-derived metadata are stored in the sanitized dataset.
+Replicates the notebook's ``clean_and_extract_url_parts``: query strings and
+fragments are stripped from each URL and the bare domain (netloc without a
+leading ``www.``) is extracted into a dedicated column.
 """
 
 from __future__ import annotations
 
-import re
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
+import numpy as np
 import pandas as pd
-import tldextract
 
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
-_FALLBACK_DOMAIN_RE = re.compile(r"^([a-zA-Z0-9.-]+)")
 
-# Registered domains that are unlikely to be tracked by tldextract's snapshot
-# are treated as non-external and labelled "local" for safety.
-_LOCAL_SUFFIXES = {"localhost", "local", "internal"}
+def clean_and_extract_url_parts(url: str) -> tuple[str, str | float]:
+    """Return ``(cleaned_url, domain)`` for a raw URL.
 
-
-def strip_query_and_path(url: str) -> str:
-    """Remove the scheme, query, fragment, and path from a URL.
-
-    Returns the bare domain (or subdomain) portion.
+    The cleaned URL drops the query string and fragment; the domain is the
+    netloc without a leading ``www.``. On parsing failure the original URL is
+    returned with a NaN domain.
     """
-    if not url or not isinstance(url, str):
-        return ""
-    cleaned = url.strip()
-    parsed = urlparse(cleaned if _SCHEME_RE.match(cleaned) else f"//{cleaned}")
-    return parsed.netloc or cleaned
-
-
-def extract_domain(url: str) -> str:
-    """Extract the registrable domain from a URL.
-
-    Falls back to a regex on the netloc when ``tldextract`` cannot identify a
-    suffix, which keeps processing resilient for exotic test URLs.
-
-    Args:
-        url: A full or partial URL.
-
-    Returns:
-        Lowercased registrable domain, or empty string if unparseable.
-    """
-    netloc = strip_query_and_path(url).lower()
-    if not netloc:
-        return ""
-
-    extracted = tldextract.extract(netloc)
-    domain = (
-        getattr(extracted, "top_domain_under_public_suffix", None)
-        or extracted.registered_domain
-        or ""
-    )
-
-    # Fallback: pull the last two labels of the host as a best-effort domain.
-    if not domain and netloc not in _LOCAL_SUFFIXES:
-        match = _FALLBACK_DOMAIN_RE.match(netloc)
-        if match:
-            labels = match.group(1).split(".")
-            domain = ".".join(labels[-2:]) if len(labels) >= 2 else match.group(1)
-    return domain or ""
+    try:
+        parsed_url = urlsplit(url)
+        cleaned_url = parsed_url._replace(query="", fragment="").geturl()
+        domain = parsed_url.netloc.replace("www.", "")
+        return cleaned_url, domain
+    except Exception:
+        return url, np.nan
 
 
 def clean_history(df: pd.DataFrame) -> pd.DataFrame:
     """Clean a raw browsing history DataFrame.
 
     Steps:
-        * Drop rows with missing/empty URLs.
-        * Drop exact duplicate ``(timestamp, url)`` rows.
-        * Extract the registrable domain.
-        * Add ``hour`` and ``date`` features from the timestamp.
-        * Mark parse quality via the ``url_valid`` flag.
+        * Strip query strings / fragments from ``url``.
+        * Extract the bare ``domain``.
+        * Convert ``timestamp`` to datetime and add ``hour``, ``date`` and
+          ``day_name`` features.
 
     Args:
         df: Raw history with ``timestamp`` and ``url`` columns.
 
     Returns:
-        Cleaned DataFrame with ``domain``, ``hour``, ``date`` columns.
+        Cleaned DataFrame with cleaned ``url``, ``domain`` and time features.
     """
-    if df.empty:
-        logger.warning("clean_history_empty_input")
-        return df.copy()
-
     cleaned = df.copy()
-    cleaned = cleaned.dropna(subset=["url"])
-    cleaned["url"] = cleaned["url"].astype(str).str.strip()
-    cleaned = cleaned[cleaned["url"] != ""]
-
-    cleaned["domain"] = cleaned["url"].map(extract_domain)
-    cleaned["url_valid"] = cleaned["domain"] != ""
-
-    before = len(df)
-    cleaned = cleaned[cleaned["url_valid"]]
-    cleaned = cleaned.drop_duplicates(subset=["timestamp", "url"]).reset_index(drop=True)
-
-    cleaned["hour"] = cleaned["timestamp"].dt.hour
-    cleaned["date"] = cleaned["timestamp"].dt.date.astype(str)
-    cleaned["day_name"] = cleaned["timestamp"].dt.day_name()
-
-    logger.info(
-        "history_cleaned",
-        dropped=before - len(cleaned),
-        kept=len(cleaned),
-        unique_domains=cleaned["domain"].nunique(),
+    cleaned[["url", "domain"]] = cleaned["url"].apply(
+        lambda x: pd.Series(clean_and_extract_url_parts(x))
     )
+    cleaned["timestamp"] = pd.to_datetime(cleaned["timestamp"])
+    cleaned["hour"] = cleaned["timestamp"].dt.hour
+    cleaned["date"] = cleaned["timestamp"].dt.date
+    cleaned["day_name"] = cleaned["timestamp"].dt.day_name()
+    logger.info("history_cleaned", rows=len(cleaned))
     return cleaned

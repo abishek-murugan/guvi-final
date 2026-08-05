@@ -1,14 +1,15 @@
 """PyTorch LSTM next-category predictor.
 
-Architecture: ``Embedding -> LSTM (2 layers) -> Dropout -> Linear -> Softmax``.
-The model consumes the last ``sequence_length`` category indices of a session
-and outputs a probability distribution over the next category.
+Architecture (from the notebook): ``Embedding -> LSTM (2 layers) -> Dropout ->
+Linear``. The model consumes the last ``sequence_length`` category indices of
+a session and outputs logits over the next category.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -18,81 +19,83 @@ from ..utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-class CategoryLSTM(nn.Module):
-    """Embedding-LSTM classifier for next-category prediction.
-
-    Args:
-        vocab_size: Number of distinct categories (+1 for the padding token).
-        embedding_dim: Dense embedding size.
-        hidden_dim: LSTM hidden size.
-        num_layers: Number of stacked LSTM layers.
-        dropout: Dropout probability applied between layers / before the head.
-    """
+class CategoryPredictor(nn.Module):
+    """Embedding-LSTM classifier for next-category prediction."""
 
     def __init__(
         self,
         vocab_size: int,
-        embedding_dim: int = 32,
-        hidden_dim: int = 64,
-        num_layers: int = 2,
-        dropout: float = 0.2,
+        embed_dim: int,
+        hidden_dim: int,
+        num_layers: int,
+        output_dim: int,
+        dropout_prob: float = 0.5,
     ) -> None:
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.lstm = nn.LSTM(
-            embedding_dim,
+            embed_dim,
             hidden_dim,
-            num_layers,
+            num_layers=num_layers,
             batch_first=True,
-            dropout=dropout if num_layers > 1 else 0.0,
+            dropout=dropout_prob,
         )
-        self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_dim, vocab_size)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(dropout_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass returning raw logits for the last timestep.
-
-        Args:
-            x: Integer tensor of shape ``(batch, seq_len)``.
-
-        Returns:
-            Logits of shape ``(batch, vocab_size)``.
-        """
+        """Forward pass returning logits over the next category."""
         embedded = self.embedding(x)
-        out, _ = self.lstm(embedded)
-        last = self.dropout(out[:, -1, :])
-        logits: torch.Tensor = self.fc(last)
-        return logits
+        _, (hidden, _) = self.lstm(embedded)
+        last_hidden_state = hidden[-1, :, :]
+        return torch.as_tensor(self.fc(self.dropout(last_hidden_state)))
 
 
 class NextCategoryPredictor:
-    """High-level wrapper: tokenizer, training surface, inference helpers.
+    """Wraps the LSTM with the category vocabulary and training surface.
 
     Args:
-        settings: Application settings (model hyper-parameters).
-        categories: Ordered list of category names.
+        settings: Model hyper-parameters.
+        categories: Ordered list of category names (order defines the ids).
     """
 
     def __init__(self, settings: Settings, categories: list[str]) -> None:
-        self.settings = settings
-        self.categories = sorted(set(categories))
-        self.cat_to_idx = {cat: i + 1 for i, cat in enumerate(self.categories)}
-        self.idx_to_cat = {i + 1: cat for i, cat in enumerate(self.categories)}
-        self.vocab_size = len(self.categories) + 1  # +1 for padding token 0
-        torch.manual_seed(settings.model.seed)
-        self.model = CategoryLSTM(
-            vocab_size=self.vocab_size,
-            embedding_dim=settings.model.embedding_dim,
+        self.categories = list(categories)
+        self.category_to_id = {category: i for i, category in enumerate(self.categories)}
+        self.id_to_category = {i: category for i, category in enumerate(self.categories)}
+        self.sequence_length = settings.model.sequence_length
+        self.config = {
+            "sequence_length": settings.model.sequence_length,
+            "embedding_dim": settings.model.embedding_dim,
+            "hidden_dim": settings.model.hidden_dim,
+            "num_layers": settings.model.num_layers,
+            "dropout": settings.model.dropout,
+        }
+        torch.manual_seed(settings.model.random_state)
+        self.model = CategoryPredictor(
+            vocab_size=len(self.categories),
+            embed_dim=settings.model.embedding_dim,
             hidden_dim=settings.model.hidden_dim,
             num_layers=settings.model.num_layers,
-            dropout=settings.model.dropout,
+            output_dim=len(self.categories),
+            dropout_prob=settings.model.dropout,
         )
 
-    def to_sequences(self, sessions: list[list[str]]) -> list[list[int]]:
-        """Convert per-session category lists into integer index sequences."""
-        return [
-            [self.cat_to_idx[c] for c in session if c in self.cat_to_idx] for session in sessions
-        ]
+    def build_samples(self, session_sequences: list[list[str]]) -> tuple[np.ndarray, np.ndarray]:
+        """Convert per-session category lists into fixed-length windows.
+
+        Returns ``(X, y)`` where each window of ``sequence_length`` categories
+        predicts the category that immediately follows it.
+        """
+        X: list[list[int]] = []
+        y: list[int] = []
+        for seq in session_sequences:
+            ids = [self.category_to_id[c] for c in seq if c in self.category_to_id]
+            if len(ids) > self.sequence_length:
+                for i in range(len(ids) - self.sequence_length):
+                    X.append(ids[i : i + self.sequence_length])
+                    y.append(ids[i + self.sequence_length])
+        return np.array(X), np.array(y)
 
     def predict_proba(self, sequence: list[str]) -> dict[str, float]:
         """Predict the next-category probability distribution for a sequence.
@@ -103,41 +106,30 @@ class NextCategoryPredictor:
         Returns:
             Mapping of category name -> probability.
         """
+        ids = [self.category_to_id[c] for c in sequence if c in self.category_to_id]
+        if not ids:
+            return {category: 0.0 for category in self.categories}
+
+        window = ids[-self.sequence_length :]
+        if len(window) < self.sequence_length:
+            window = [window[0]] * (self.sequence_length - len(window)) + window
+
         self.model.eval()
-        indices = self.to_sequences([sequence])[0]
-        if not indices:
-            return {cat: 0.0 for cat in self.categories}
-        pad = self.settings.model.sequence_length - len(indices)
-        tensor = torch.tensor(
-            [[0] * max(pad, 0) + indices[-self.settings.model.sequence_length :]], dtype=torch.long
-        )
+        tensor = torch.tensor([window], dtype=torch.long)
         with torch.no_grad():
             logits = self.model(tensor)
         probs = torch.softmax(logits, dim=-1).squeeze(0)
-        return {self.idx_to_cat[i]: float(probs[i].item()) for i in range(1, self.vocab_size)}
+        return {self.id_to_category[i]: float(probs[i].item()) for i in range(len(self.categories))}
 
     def save(self, path: Path) -> None:
-        """Persist the trained model, vocab, and full model configuration.
-
-        Args:
-            path: Destination ``.pt`` file.
-        """
+        """Persist the trained model, vocabulary and configuration."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
                 "model_state_dict": self.model.state_dict(),
                 "categories": self.categories,
-                "config": {
-                    "sequence_length": self.settings.model.sequence_length,
-                    "embedding_dim": self.settings.model.embedding_dim,
-                    "hidden_dim": self.settings.model.hidden_dim,
-                    "num_layers": self.settings.model.num_layers,
-                    "dropout": self.settings.model.dropout,
-                    "batch_size": self.settings.model.batch_size,
-                    "learning_rate": self.settings.model.learning_rate,
-                    "seed": self.settings.model.seed,
-                },
+                "config": self.config,
             },
             path,
         )
@@ -145,19 +137,7 @@ class NextCategoryPredictor:
 
     @classmethod
     def load(cls, path: Path, settings: Settings | None = None) -> NextCategoryPredictor:
-        """Reconstruct a predictor from a saved checkpoint.
-
-        The model architecture is rebuilt from the checkpoint's full config,
-        so no external settings are required for a faithful reload.
-
-        Args:
-            path: Path to a checkpoint written by :meth:`save`.
-            settings: Optional settings; when omitted, ``Settings()`` defaults
-                are used (the checkpoint config takes precedence).
-
-        Returns:
-            A :class:`NextCategoryPredictor` with the saved weights loaded.
-        """
+        """Reconstruct a predictor from a saved checkpoint."""
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
         settings = settings or Settings()
         settings.model.sequence_length = checkpoint["config"]["sequence_length"]

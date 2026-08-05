@@ -1,20 +1,20 @@
 """Unsupervised clustering of browsing sessions.
 
-Sessions are embedded in a fixed feature space (duration, event count,
-switching rate, RAM aggregates, hour-of-day, weekend flag). KMeans (or GMM)
-groups them into interpretable behavior clusters which are then labelled from
-their top feature drivers.
+Sessions are embedded in a fixed feature space, scaled with
+``StandardScaler`` and grouped with KMeans (``k=2``, matching the notebook's
+elbow/silhouette analysis). A 2-D PCA projection and a silhouette sweep are
+kept for evaluation and visualization.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
-from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 
 from ..config import Settings
@@ -25,145 +25,131 @@ logger = get_logger(__name__)
 
 @dataclass
 class ClusterResult:
-    """Container for clustering output."""
+    """Container for clustering outputs."""
 
     labels: np.ndarray
     silhouette: float
     feature_names: list[str]
     cluster_centers: pd.DataFrame
-    profiles: dict[int, str] = field(default_factory=dict)
-    model: object | None = None
+    profiles: dict[int, str]
+    elbow: pd.DataFrame
+    model: KMeans
+    scaler: StandardScaler
+    pca: PCA
+    X_scaled: np.ndarray
+    X_pca: np.ndarray
+
+
+_PROFILE_FEATURES = [
+    "session_duration_minutes",
+    "page_count",
+    "peak_used_mb",
+    "unique_categories",
+]
 
 
 class BehaviorClusterer:
     """Clusters session feature tables into labelled behavior groups.
 
     Args:
-        settings: Application settings (algorithm, n_clusters, features).
+        settings: Application settings (features, n_clusters, random state).
     """
 
     def __init__(self, settings: Settings) -> None:
-        self.algorithm = settings.clustering.algorithm
         self.n_clusters = settings.clustering.n_clusters
         self.random_state = settings.clustering.random_state
         self.features = list(settings.clustering.features)
 
     def fit(self, sessions: pd.DataFrame) -> ClusterResult:
-        """Fit the clustering model and produce labelled profiles.
-
-        Args:
-            sessions: Session feature table (from the sessionizer).
-
-        Returns:
-            A :class:`ClusterResult` with labels, silhouette score, centers and
-            human-readable cluster profiles.
-        """
+        """Fit the clustering model and produce labelled cluster profiles."""
         available = [f for f in self.features if f in sessions.columns]
-        missing = set(self.features) - set(available)
-        if missing:
-            logger.warning("clustering_features_missing", missing=sorted(missing))
+        X = sessions[available].fillna(0.0)
 
-        X = sessions[available].fillna(0.0).to_numpy(dtype=np.float64)
-        if len(X) < 2:
-            raise ValueError("Need at least 2 sessions to cluster")
-
-        n_clusters = min(self.n_clusters, len(X))
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        if self.algorithm == "gmm":
-            model = GaussianMixture(n_components=n_clusters, random_state=self.random_state)
-        elif self.algorithm == "dbscan":
-            model = None
-            labels = _dbscan_fallback(X_scaled)
-        else:
-            model = KMeans(
-                n_clusters=n_clusters,
-                n_init=10,
-                random_state=self.random_state,
-            )
-            labels = model.fit_predict(X_scaled)
+        elbow = self._elbow_analysis(X_scaled)
+        kmeans = KMeans(
+            n_clusters=self.n_clusters,
+            init="k-means++",
+            random_state=self.random_state,
+            n_init=10,
+        )
+        labels = kmeans.fit_predict(X_scaled)
+        silhouette = (
+            silhouette_score(X_scaled, labels) if len(np.unique(labels)) > 1 else float("nan")
+        )
 
-        if model is not None:
-            labels = model.fit_predict(X_scaled)
+        pca = PCA(n_components=2, random_state=self.random_state)
+        X_pca = pca.fit_transform(X_scaled)
 
-        if len(np.unique(labels)) < 2:
-            silhouette = float("nan")
-        else:
-            silhouette = float(silhouette_score(X_scaled, labels))
-
-        centers_df = _cluster_centers(X, labels, available)
-        profiles = _label_clusters(centers_df, available)
+        centers = pd.DataFrame(X, columns=available).groupby(labels).mean()
+        profiles = self._label_clusters(centers)
 
         logger.info(
             "clustering_done",
-            algorithm=self.algorithm,
-            n_clusters=n_clusters,
+            n_clusters=self.n_clusters,
             silhouette=round(silhouette, 4),
         )
         return ClusterResult(
             labels=labels,
             silhouette=silhouette,
             feature_names=available,
-            cluster_centers=centers_df,
+            cluster_centers=centers,
             profiles=profiles,
-            model=model,
+            elbow=elbow,
+            model=kmeans,
+            scaler=scaler,
+            pca=pca,
+            X_scaled=X_scaled,
+            X_pca=X_pca,
         )
 
+    def _elbow_analysis(self, X_scaled: np.ndarray, max_k: int = 9) -> pd.DataFrame:
+        """Silhouette + inertia sweep over candidate cluster counts."""
+        rows: list[dict[str, float | int | None]] = []
+        kmeans_1 = KMeans(n_clusters=1, init="k-means++", random_state=self.random_state, n_init=10)
+        kmeans_1.fit(X_scaled)
+        rows.append({"k": 1, "wcss": float(kmeans_1.inertia_), "silhouette": None})
 
-def _dbscan_fallback(X: np.ndarray) -> np.ndarray:
-    """DBSCAN-style density clustering with adaptive epsilon (simple impl)."""
-    from sklearn.cluster import DBSCAN
+        for k in range(2, min(max_k, len(X_scaled))):
+            kmeans = KMeans(
+                n_clusters=k, init="k-means++", random_state=self.random_state, n_init=10
+            )
+            labels = kmeans.fit_predict(X_scaled)
+            rows.append(
+                {
+                    "k": k,
+                    "wcss": float(kmeans.inertia_),
+                    "silhouette": float(silhouette_score(X_scaled, labels)),
+                }
+            )
+        return pd.DataFrame(rows)
 
-    # Heuristic epsilon: 0.3 * mean pairwise distance of scaled features.
-    n = min(len(X), 2000)
-    sample = X[np.random.default_rng(0).choice(len(X), n, replace=False)]
-    dists = np.linalg.norm(sample[:, None, :] - sample[None, :, :], axis=-1)
-    eps = float(0.3 * dists[np.triu_indices(n, 1)].mean())
-    return np.asarray(DBSCAN(eps=eps, min_samples=2).fit_predict(X))
-
-
-def _cluster_centers(X: np.ndarray, labels: np.ndarray, features: list[str]) -> pd.DataFrame:
-    """Mean feature values per cluster (unscaled, for interpretation)."""
-    rows = {}
-    for cluster in np.unique(labels):
-        rows[int(cluster)] = X[labels == cluster].mean(axis=0)
-    return pd.DataFrame.from_dict(rows, orient="index", columns=features).sort_index()
-
-
-def _label_clusters(centers: pd.DataFrame, features: list[str]) -> dict[int, str]:
-    """Generate a human-readable label per cluster from its top drivers.
-
-    Labels combine the two most distinguishing feature deviations, e.g.
-    ``"High duration + high RAM"``.
-    """
-    if centers.empty:
-        return {}
-    normalized = centers.sub(centers.mean(), axis=1).div(centers.std().replace(0, 1), axis=1)
-    labels: dict[int, str] = {}
-    for cluster in centers.index:
-        row = normalized.loc[cluster].dropna()
-        top = row.abs().sort_values(ascending=False).head(2)
-        parts = []
-        for feature, z in top.items():
-            direction = "high" if z >= 0 else "low"
-            parts.append(f"{direction} {_humanize_feature(feature)}")
-        labels[int(cluster)] = " + ".join(parts) if parts else "balanced session"
-    return labels
+    def _label_clusters(self, centers: pd.DataFrame) -> dict[int, str]:
+        """Generate a human-readable label per cluster from its drivers."""
+        means = centers.mean()
+        labels: dict[int, str] = {}
+        for cluster in centers.index:
+            parts = []
+            for feature in _PROFILE_FEATURES:
+                if feature not in centers.columns:
+                    continue
+                ratio = centers.loc[cluster, feature] / means[feature] if means[feature] else 1.0
+                if ratio > 1.2:
+                    parts.append(f"High {_humanize(feature)}")
+                elif ratio < 0.8:
+                    parts.append(f"Low {_humanize(feature)}")
+            labels[int(cluster)] = " + ".join(parts) if parts else "Balanced session"
+        return labels
 
 
-def _humanize_feature(name: str) -> str:
+def _humanize(name: str) -> str:
     """Convert a snake_case feature name into a readable label."""
     mapping = {
-        "duration_minutes": "duration",
-        "event_count": "activity",
-        "unique_domains": "domain variety",
-        "category_entropy": "topic mix",
-        "switching_rate": "switching",
-        "avg_ram_mb": "avg RAM",
-        "peak_ram_mb": "peak RAM",
-        "median_hour": "late hour",
-        "is_weekend": "weekend use",
-        "session_span_hours": "session span",
+        "session_duration_minutes": "duration",
+        "page_count": "activity",
+        "peak_used_mb": "RAM",
+        "unique_categories": "topic variety",
     }
     return mapping.get(name, name.replace("_", " "))
